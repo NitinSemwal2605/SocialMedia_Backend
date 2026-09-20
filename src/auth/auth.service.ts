@@ -1,8 +1,13 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { DatabaseService } from '../database/database.service.js';
 import { ConfigService } from '@nestjs/config';
+import { RegisterDto } from './dto/register.dto.js';
+import { RegisterAdminDto } from './dto/register-admin.dto.js';
+import { LoginDto } from './dto/login.dto.js';
 
 @Injectable()
 export class AuthService {
@@ -12,7 +17,7 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
-  async register(registerDto: any) {
+  async register(registerDto: RegisterDto) {
     const { email, password } = registerDto;
     
     const existingUser = await this.databaseService.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -29,7 +34,7 @@ export class AuthService {
     return result.rows[0];
   }
 
-  async registerAdmin(registerDto: any) {
+  async registerAdmin(registerDto: RegisterAdminDto) {
     const { email, password, secretCode } = registerDto;
     
     const adminSecret = this.configService.get<string>('ADMIN_SECRET_CODE', 'super_secret_admin_code');
@@ -51,7 +56,7 @@ export class AuthService {
     return result.rows[0];
   }
 
-  async login(loginDto: any) {
+  async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
     
     const result = await this.databaseService.query('SELECT * FROM users WHERE email = $1', [email]);
