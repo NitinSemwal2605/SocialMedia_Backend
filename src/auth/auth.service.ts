@@ -1,8 +1,6 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
 import { DatabaseService } from '../database/database.service.js';
 import { ConfigService } from '@nestjs/config';
 import { RegisterDto } from './dto/register.dto.js';
@@ -27,11 +25,14 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await this.databaseService.query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role',
+      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
       [email, hashedPassword, 'USER']
     );
 
-    return result.rows[0];
+    return {
+      message: 'User registered successfully',
+      user: result.rows[0],
+    };
   }
 
   async registerAdmin(registerDto: RegisterAdminDto) {
@@ -49,11 +50,14 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await this.databaseService.query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role',
+      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
       [email, hashedPassword, 'ADMIN']
     );
 
-    return result.rows[0];
+    return {
+      message: 'Admin registered successfully',
+      user: result.rows[0],
+    };
   }
 
   async login(loginDto: LoginDto) {
@@ -84,7 +88,16 @@ export class AuthService {
       [user.id, jwt_token, expiresAt]
     );
 
-    return { access_token: jwt_token };
+    return { 
+      message: 'Login successful',
+      access_token: jwt_token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        created_at: user.created_at,
+      }
+    };
   }
 
   async logout(token: string) {
