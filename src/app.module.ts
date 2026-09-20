@@ -8,12 +8,12 @@ import { AuthModule } from './auth/auth.module.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true }), // This is a module that will be registered with the application.
     DatabaseModule,
     UsersModule,
     AuthModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController], // This is an array of controllers that will be registered with the application.
+  providers: [AppService], // This is an array of providers that will be registered with the application.
 })
 export class AppModule {}
