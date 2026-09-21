@@ -18,3 +18,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    username VARCHAR(255) UNIQUE,
+    full_name VARCHAR(255),
+    bio TEXT,
+    profile_picture_url VARCHAR(255),
+    location VARCHAR(255),
+    website VARCHAR(255),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
