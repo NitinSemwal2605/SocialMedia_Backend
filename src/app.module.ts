@@ -5,6 +5,8 @@ import { AppService } from './app.service.js';
 import { DatabaseModule } from './database/database.module.js';
 import { UsersModule } from './users/users.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { PostsModule } from './posts/posts.module.js';
+import { FriendsModule } from './friends/friends.module.js';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { AuthModule } from './auth/auth.module.js';
     DatabaseModule,
     UsersModule,
     AuthModule,
+    PostsModule,
+    FriendsModule,
   ],
   controllers: [AppController], // This is an array of controllers that will be registered with the application.
   providers: [AppService], // This is an array of providers that will be registered with the application.
