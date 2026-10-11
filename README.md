@@ -20,6 +20,12 @@ The primary objective of this project is to deeply understand backend architectu
 * **Likes System**: A many-to-many relationship allowing users to like/unlike posts, complete with aggregate queries to fetch total like counts.
 * **Comments**: Users can leave comments on posts, linked relationally to both the user and the post.
 
+### 📰 User Feed & Cursor-Based Pagination
+* **Personalized Feed (`GET /feed`)**: Fetches posts from users the current authenticated user follows, ordered by newest.
+* **Complex Multi-Table JOINs**: Combines `followers`, `posts`, `users`, `user_profiles`, `post_likes`, and `post_comments` with aggregation for `like_count`, `comment_count`, and `is_liked`.
+* **High-Performance Cursor Pagination**: Uses `WHERE p.id < :cursor ORDER BY p.id DESC LIMIT :limit + 1` instead of slow `OFFSET`, enabling infinite scrolling with O(1) page transitions even on huge tables.
+* **Supports Flexible Queries**: Supports query parameters `cursor` (or `last_id`), `limit` (default 10, max 100), and optional `include_self` flag.
+
 ### 🛡️ Data Validation & Transformation
 * Extensive use of **Data Transfer Objects (DTOs)**.
 * Global implementation of `class-validator` for strict payload validation.

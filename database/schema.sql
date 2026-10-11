@@ -63,3 +63,11 @@ CREATE TABLE IF NOT EXISTS followers (
     PRIMARY KEY (follower_id, following_id),
     CHECK (follower_id != following_id)
 );
+
+-- Indexes to optimize cursor-based feed generation and foreign key joins
+CREATE INDEX IF NOT EXISTS idx_posts_author_id ON posts (author_id);
+CREATE INDEX IF NOT EXISTS idx_posts_id_desc ON posts (id DESC);
+CREATE INDEX IF NOT EXISTS idx_followers_following_id ON followers (following_id);
+CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes (post_id);
+CREATE INDEX IF NOT EXISTS idx_post_comments_post_id ON post_comments (post_id);
+
