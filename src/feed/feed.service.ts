@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../database/database.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import { GetFeedDto } from './dto/get-feed.dto.js';
 
 export interface FeedAuthor {
@@ -33,7 +33,7 @@ export interface FeedResponse {
 
 @Injectable()
 export class FeedService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getFeed(userId: number, query: GetFeedDto = new GetFeedDto()): Promise<FeedResponse> {
     const cursor = query.cursor ?? query.last_id;
@@ -92,7 +92,7 @@ export class FeedService {
       LIMIT ${limitPlaceholder};
     `;
 
-    const result = await this.databaseService.query(sql, params);
+    const result = await this.prisma.query(sql, params);
     const rows = result.rows;
 
     const hasMore = rows.length > limit;

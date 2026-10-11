@@ -1,8 +1,8 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { DatabaseService } from '../database/database.service.js';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { RegisterAdminDto } from './dto/register-admin.dto.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -10,111 +10,125 @@ import { LoginDto } from './dto/login.dto.js';
 @Injectable()
 export class AuthService {
   constructor(
-    private databaseService: DatabaseService,
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(registerDto: RegisterDto) {
     const { email, password } = registerDto;
-    
-    const existingUser = await this.databaseService.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
+
+    const existingUser = await this.prisma.orm.User.where({ email } as any).first();
+    if (existingUser) {
       throw new BadRequestException('User already exists');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await this.databaseService.query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
-      [email, hashedPassword, 'USER']
-    );
+    const user = await this.prisma.orm.User
+      .select('id', 'email', 'role', 'createdAt')
+      .create({
+        email,
+        passwordHash: hashedPassword,
+        role: 'USER',
+      } as any);
 
     return {
       message: 'User registered successfully',
-      user: result.rows[0],
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        created_at: user.createdAt,
+      },
     };
   }
 
   async registerAdmin(registerDto: RegisterAdminDto) {
     const { email, password, secretCode } = registerDto;
-    
+
     const adminSecret = this.configService.get<string>('ADMIN_SECRET_CODE', 'super_secret_admin_code');
     if (secretCode !== adminSecret) {
       throw new UnauthorizedException('Invalid admin secret code');
     }
 
-    const existingUser = await this.databaseService.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
+    const existingUser = await this.prisma.orm.User.where({ email } as any).first();
+    if (existingUser) {
       throw new BadRequestException('User already exists');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await this.databaseService.query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
-      [email, hashedPassword, 'ADMIN']
-    );
+    const user = await this.prisma.orm.User
+      .select('id', 'email', 'role', 'createdAt')
+      .create({
+        email,
+        passwordHash: hashedPassword,
+        role: 'ADMIN',
+      } as any);
 
     return {
       message: 'Admin registered successfully',
-      user: result.rows[0],
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        created_at: user.createdAt,
+      },
     };
   }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
-    
-    const result = await this.databaseService.query('SELECT * FROM users WHERE email = $1', [email]);
-    const user = result.rows[0];
-    
+
+    const user = await this.prisma.orm.User.where({ email } as any).first();
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
     const jwt_token = this.jwtService.sign(payload);
-    
-    // Calculate expiration (e.g., 1 day from now)
+
+    // Calculate session expiration (1 day)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 1);
 
-    // Save session in DB
-    await this.databaseService.query(
-      'INSERT INTO sessions (user_id, jwt_token, expires_at, is_active) VALUES ($1, $2, $3, true)',
-      [user.id, jwt_token, expiresAt]
-    );
+    await this.prisma.orm.Session.create({
+      userId: user.id,
+      jwtToken: jwt_token,
+      expiresAt: expiresAt.toISOString() as any,
+      isActive: true,
+    });
 
-    return { 
+    return {
       message: 'Login successful',
       access_token: jwt_token,
       user: {
         id: user.id,
         email: user.email,
         role: user.role,
-        created_at: user.created_at,
-      }
+        created_at: user.createdAt,
+      },
     };
   }
 
   async logout(token: string) {
-    await this.databaseService.query(
-      'UPDATE sessions SET is_active = false WHERE jwt_token = $1',
-      [token]
-    );
+    await this.prisma.orm.Session
+      .where({ jwtToken: token })
+      .update({ isActive: false });
     return { message: 'Logged out successfully' };
   }
 
   async validateSession(token: string): Promise<boolean> {
-    const result = await this.databaseService.query(
-      'SELECT is_active FROM sessions WHERE jwt_token = $1 AND expires_at > NOW()',
-      [token]
-    );
-    
-    if (result.rows.length === 0) return false;
-    return result.rows[0].is_active;
+    const session = await this.prisma.orm.Session
+      .where({ jwtToken: token })
+      .first();
+
+    if (!session) return false;
+    if (!session.isActive) return false;
+    return new Date(session.expiresAt) > new Date();
   }
 }

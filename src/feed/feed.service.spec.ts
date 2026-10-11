@@ -1,15 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FeedService } from './feed.service.js';
-import { DatabaseService } from '../database/database.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import { GetFeedDto } from './dto/get-feed.dto.js';
 
 describe('FeedService', () => {
   let service: FeedService;
-  let mockDatabaseService: { query: ReturnType<typeof vi.fn> };
+  let mockPrismaService: { query: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
-    mockDatabaseService = {
+    mockPrismaService = {
       query: vi.fn(),
     };
 
@@ -17,8 +17,8 @@ describe('FeedService', () => {
       providers: [
         FeedService,
         {
-          provide: DatabaseService,
-          useValue: mockDatabaseService,
+          provide: PrismaService,
+          useValue: mockPrismaService,
         },
       ],
     }).compile();
@@ -77,7 +77,7 @@ describe('FeedService', () => {
         },
       ];
 
-      mockDatabaseService.query.mockResolvedValueOnce({ rows: mockRows });
+      mockPrismaService.query.mockResolvedValueOnce({ rows: mockRows });
 
       const queryDto: GetFeedDto = {
         limit: 2,
@@ -85,8 +85,8 @@ describe('FeedService', () => {
 
       const result = await service.getFeed(1, queryDto);
 
-      expect(mockDatabaseService.query).toHaveBeenCalledTimes(1);
-      const [sql, params] = mockDatabaseService.query.mock.calls[0];
+      expect(mockPrismaService.query).toHaveBeenCalledTimes(1);
+      const [sql, params] = mockPrismaService.query.mock.calls[0];
 
       // Verifies SQL joins followers, users, user_profiles, post_likes, post_comments
       expect(sql).toContain('JOIN followers f ON p.author_id = f.following_id');
@@ -109,7 +109,7 @@ describe('FeedService', () => {
     });
 
     it('should handle cursor pagination using WHERE p.id < $cursor', async () => {
-      mockDatabaseService.query.mockResolvedValueOnce({
+      mockPrismaService.query.mockResolvedValueOnce({
         rows: [
           {
             id: 15,
@@ -135,7 +135,7 @@ describe('FeedService', () => {
 
       const result = await service.getFeed(1, queryDto);
 
-      const [sql, params] = mockDatabaseService.query.mock.calls[0];
+      const [sql, params] = mockPrismaService.query.mock.calls[0];
       expect(sql).toContain('p.id < $2');
       expect(params).toEqual([1, 18, 11]);
 
@@ -149,7 +149,7 @@ describe('FeedService', () => {
     });
 
     it('should support last_id alias for cursor pagination', async () => {
-      mockDatabaseService.query.mockResolvedValueOnce({ rows: [] });
+      mockPrismaService.query.mockResolvedValueOnce({ rows: [] });
 
       const queryDto: GetFeedDto = {
         last_id: 50,
@@ -158,7 +158,7 @@ describe('FeedService', () => {
 
       const result = await service.getFeed(1, queryDto);
 
-      const [sql, params] = mockDatabaseService.query.mock.calls[0];
+      const [sql, params] = mockPrismaService.query.mock.calls[0];
       expect(sql).toContain('p.id < $2');
       expect(params).toEqual([1, 50, 11]);
       expect(result.data).toEqual([]);
@@ -167,7 +167,7 @@ describe('FeedService', () => {
     });
 
     it('should support include_self to include own posts in feed', async () => {
-      mockDatabaseService.query.mockResolvedValueOnce({ rows: [] });
+      mockPrismaService.query.mockResolvedValueOnce({ rows: [] });
 
       const queryDto: GetFeedDto = {
         limit: 10,
@@ -176,7 +176,7 @@ describe('FeedService', () => {
 
       await service.getFeed(1, queryDto);
 
-      const [sql] = mockDatabaseService.query.mock.calls[0];
+      const [sql] = mockPrismaService.query.mock.calls[0];
       expect(sql).toContain('LEFT JOIN followers f');
       expect(sql).toContain('WHERE (f.follower_id IS NOT NULL OR p.author_id = $1)');
     });

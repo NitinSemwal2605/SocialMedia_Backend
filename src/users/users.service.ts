@@ -2,150 +2,198 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
-import { DatabaseService } from '../database/database.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
     const { email, password } = createUserDto;
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await this.databaseService.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, role, created_at',
-      [email, hashedPassword]
-    );
-    return result.rows[0];
+    const user = await this.prisma.orm.User
+      .select('id', 'email', 'role', 'createdAt')
+      .create({
+        email,
+        passwordHash: hashedPassword,
+        role: 'USER',
+      } as any);
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      created_at: user.createdAt,
+    };
   }
 
   async findAll() {
-    const result = await this.databaseService.query(
-      'SELECT id, email, role, created_at FROM users'
-    );
-    return result.rows;
+    const users = await this.prisma.orm.User
+      .select('id', 'email', 'role', 'createdAt')
+      .all();
+
+    return users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      role: u.role,
+      created_at: u.createdAt,
+    }));
   }
 
   async findOne(id: number) {
-    const result = await this.databaseService.query(
-      'SELECT id, email, role, created_at FROM users WHERE id = $1',
-      [id]
-    );
-    if (result.rows.length === 0) {
+    const user = await this.prisma.orm.User
+      .where({ id })
+      .select('id', 'email', 'role', 'createdAt')
+      .first();
+
+    if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    return result.rows[0];
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      created_at: user.createdAt,
+    };
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
-    // Basic dynamic update query generation for demonstration
-    const fields = [];
-    const values = [];
-    let counter = 1;
+    await this.findOne(id);
 
+    const updateData: Record<string, any> = {};
     if (updateUserDto.email) {
-      fields.push(`email = $${counter++}`);
-      values.push(updateUserDto.email);
+      updateData['email'] = updateUserDto.email;
     }
     if (updateUserDto.password) {
-      fields.push(`password_hash = $${counter++}`);
-      values.push(await bcrypt.hash(updateUserDto.password, 10));
+      updateData['passwordHash'] = await bcrypt.hash(updateUserDto.password, 10);
     }
 
-    if (fields.length === 0) {
+    if (Object.keys(updateData).length === 0) {
       return this.findOne(id);
     }
 
-    values.push(id);
-    const query = `UPDATE users SET ${fields.join(', ')} WHERE id = $${counter} RETURNING id, email, role, created_at`;
-    
-    const result = await this.databaseService.query(query, values);
-    if (result.rows.length === 0) {
+    const updated = await this.prisma.orm.User
+      .where({ id })
+      .select('id', 'email', 'role', 'createdAt')
+      .update(updateData as any);
+
+    if (!updated) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
-    return result.rows[0];
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      role: updated.role,
+      created_at: updated.createdAt,
+    };
   }
 
   async remove(id: number) {
-    const result = await this.databaseService.query(
-      'DELETE FROM users WHERE id = $1 RETURNING id',
-      [id]
-    );
-    if (result.rows.length === 0) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
+    await this.findOne(id);
+    await this.prisma.orm.User.where({ id }).delete();
     return { message: `User with ID ${id} successfully deleted` };
   }
 
   async getProfile(userId: number) {
-    const result = await this.databaseService.query(
-      `SELECT u.id as user_id, u.email, u.role, 
-              p.username, p.full_name, p.bio, p.profile_picture_url, 
-              p.location, p.website, p.updated_at
-       FROM users u
-       LEFT JOIN user_profiles p ON u.id = p.user_id
-       WHERE u.id = $1`,
-      [userId]
-    );
+    const user = await this.prisma.orm.User
+      .where({ id: userId })
+      .include('profile')
+      .first();
 
-    if (result.rows.length === 0) {
+    if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    return result.rows[0];
+    const profile = user.profile;
+    return {
+      user_id: user.id,
+      email: user.email,
+      role: user.role,
+      username: profile?.username ?? null,
+      full_name: profile?.fullName ?? null,
+      bio: profile?.bio ?? null,
+      profile_picture_url: profile?.profilePictureUrl ?? null,
+      location: profile?.location ?? null,
+      website: profile?.website ?? null,
+      updated_at: profile?.updatedAt ?? null,
+    };
   }
 
   async upsertProfile(userId: number, updateProfileDto: UpdateProfileDto) {
-    // Check if user exists
+    // Ensure user exists
     await this.findOne(userId);
 
     const { username, full_name, bio, profile_picture_url, location, website } = updateProfileDto;
 
-    const result = await this.databaseService.query(
-      `INSERT INTO user_profiles (user_id, username, full_name, bio, profile_picture_url, location, website)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (user_id) DO UPDATE SET
-         username = EXCLUDED.username,
-         full_name = EXCLUDED.full_name,
-         bio = EXCLUDED.bio,
-         profile_picture_url = EXCLUDED.profile_picture_url,
-         location = EXCLUDED.location,
-         website = EXCLUDED.website,
-         updated_at = CURRENT_TIMESTAMP
-       RETURNING *`,
-      [userId, username, full_name, bio, profile_picture_url, location, website]
-    );
+    const existingProfile = await this.prisma.orm.UserProfile
+      .where({ userId })
+      .first();
 
-    return result.rows[0];
+    let profile;
+    if (existingProfile) {
+      profile = await this.prisma.orm.UserProfile
+        .where({ userId })
+        .update({
+          ...(username !== undefined && { username }),
+          ...(full_name !== undefined && { fullName: full_name }),
+          ...(bio !== undefined && { bio }),
+          ...(profile_picture_url !== undefined && { profilePictureUrl: profile_picture_url }),
+          ...(location !== undefined && { location }),
+          ...(website !== undefined && { website }),
+        } as any);
+    } else {
+      profile = await this.prisma.orm.UserProfile.create({
+        userId,
+        username: username ?? null,
+        fullName: full_name ?? null,
+        bio: bio ?? null,
+        profilePictureUrl: profile_picture_url ?? null,
+        location: location ?? null,
+        website: website ?? null,
+      } as any);
+    }
+
+    if (!profile) {
+      throw new NotFoundException(`Profile for user ${userId} could not be updated`);
+    }
+
+    return {
+      id: profile.id,
+      user_id: profile.userId,
+      username: profile.username,
+      full_name: profile.fullName,
+      bio: profile.bio,
+      profile_picture_url: profile.profilePictureUrl,
+      location: profile.location,
+      website: profile.website,
+      updated_at: profile.updatedAt,
+    };
   }
 
   async toggleFollow(followerId: number, followingId: number) {
-    // Check if the user is trying to follow themselves
     if (followerId === followingId) {
-      throw new Error("You cannot follow yourself");
+      throw new Error('You cannot follow yourself');
     }
 
-    await this.findOne(followingId); // Ensure the user to follow exists
+    await this.findOne(followingId);
 
-    const checkResult = await this.databaseService.query(
-      'SELECT * FROM followers WHERE follower_id = $1 AND following_id = $2',
-      [followerId, followingId]
-    );
+    const existingFollow = await this.prisma.orm.Follower
+      .where({ followerId, followingId })
+      .first();
 
-    // Check if the follower relationship already exists
-    if (checkResult.rows.length > 0) {
-      // If already following, unfollow by removing the record
-      await this.databaseService.query(
-        'DELETE FROM followers WHERE follower_id = $1 AND following_id = $2',
-        [followerId, followingId]
-      );
+    if (existingFollow) {
+      await this.prisma.orm.Follower
+        .where({ followerId, followingId })
+        .delete();
       return { message: `Successfully unfollowed user ${followingId}` };
     } else {
-      // If not following, follow by inserting a new record
-      await this.databaseService.query(
-        'INSERT INTO followers (follower_id, following_id) VALUES ($1, $2)',
-        [followerId, followingId]
-      );
+      await this.prisma.orm.Follower.create({
+        followerId,
+        followingId,
+      });
       return { message: `Successfully followed user ${followingId}` };
     }
   }
@@ -153,30 +201,40 @@ export class UsersService {
   async getFollowers(userId: number) {
     await this.findOne(userId);
 
-    const result = await this.databaseService.query(
-      `SELECT u.id, u.email, p.username, p.full_name, p.profile_picture_url
-       FROM followers f
-       JOIN users u ON f.follower_id = u.id
-       LEFT JOIN user_profiles p ON u.id = p.user_id
-       WHERE f.following_id = $1
-       ORDER BY f.created_at DESC`,
-      [userId]
-    );
-    return result.rows;
+    const followers = await this.prisma.orm.Follower
+      .where({ followingId: userId })
+      .include('follower', (f) => f.include('profile'))
+      .orderBy((f) => f.createdAt.desc())
+      .all();
+
+    return followers
+      .filter((f) => f.follower !== null && f.follower !== undefined)
+      .map((f) => ({
+        id: f.follower!.id,
+        email: f.follower!.email,
+        username: f.follower!.profile?.username ?? null,
+        full_name: f.follower!.profile?.fullName ?? null,
+        profile_picture_url: f.follower!.profile?.profilePictureUrl ?? null,
+      }));
   }
 
   async getFollowing(userId: number) {
     await this.findOne(userId);
 
-    const result = await this.databaseService.query(
-      `SELECT u.id, u.email, p.username, p.full_name, p.profile_picture_url
-       FROM followers f
-       JOIN users u ON f.following_id = u.id
-       LEFT JOIN user_profiles p ON u.id = p.user_id
-       WHERE f.follower_id = $1
-       ORDER BY f.created_at DESC`,
-      [userId]
-    );
-    return result.rows;
+    const followings = await this.prisma.orm.Follower
+      .where({ followerId: userId })
+      .include('following', (f) => f.include('profile'))
+      .orderBy((f) => f.createdAt.desc())
+      .all();
+
+    return followings
+      .filter((f) => f.following !== null && f.following !== undefined)
+      .map((f) => ({
+        id: f.following!.id,
+        email: f.following!.email,
+        username: f.following!.profile?.username ?? null,
+        full_name: f.following!.profile?.fullName ?? null,
+        profile_picture_url: f.following!.profile?.profilePictureUrl ?? null,
+      }));
   }
 }

@@ -2,131 +2,166 @@ import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/co
 import { CreatePostDto } from './dto/create-post.dto.js';
 import { UpdatePostDto } from './dto/update-post.dto.js';
 import { CreateCommentDto } from './dto/create-comment.dto.js';
-import { DatabaseService } from '../database/database.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(createPostDto: CreatePostDto, authorId: number) {
     const { content } = createPostDto;
-    const result = await this.databaseService.query(
-      'INSERT INTO posts (author_id, content) VALUES ($1, $2) RETURNING *',
-      [authorId, content]
-    );
-    return result.rows[0];
+    const post = await this.prisma.orm.Post.create({
+      authorId,
+      content,
+    });
+    return {
+      id: post.id,
+      author_id: post.authorId,
+      content: post.content,
+      created_at: post.createdAt,
+      updated_at: post.updatedAt,
+    };
   }
 
   async findAll() {
-    const result = await this.databaseService.query(
-      `SELECT p.*, u.email as author_email, COUNT(pl.user_id)::int as like_count 
-       FROM posts p 
-       JOIN users u ON p.author_id = u.id 
-       LEFT JOIN post_likes pl ON p.id = pl.post_id
-       GROUP BY p.id, u.email
-       ORDER BY p.created_at DESC`
-    );
-    return result.rows;
+    const posts = await this.prisma.orm.Post
+      .include('author')
+      .include('likes', (l) => l.count())
+      .orderBy((p) => p.createdAt.desc())
+      .all();
+
+    return posts.map((p) => ({
+      id: p.id,
+      author_id: p.authorId,
+      content: p.content,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt,
+      author_email: p.author.email,
+      like_count: p.likes,
+    }));
   }
 
   async findOne(id: number) {
-    const result = await this.databaseService.query(
-      `SELECT p.*, u.email as author_email, COUNT(pl.user_id)::int as like_count 
-       FROM posts p 
-       JOIN users u ON p.author_id = u.id 
-       LEFT JOIN post_likes pl ON p.id = pl.post_id
-       WHERE p.id = $1
-       GROUP BY p.id, u.email`,
-      [id]
-    );
-    
-    if (result.rows.length === 0) {
+    const post = await this.prisma.orm.Post
+      .where({ id })
+      .include('author')
+      .include('likes', (l) => l.count())
+      .first();
+
+    if (!post) {
       throw new NotFoundException(`Post with ID ${id} not found`);
     }
-    return result.rows[0];
+
+    return {
+      id: post.id,
+      author_id: post.authorId,
+      content: post.content,
+      created_at: post.createdAt,
+      updated_at: post.updatedAt,
+      author_email: post.author.email,
+      like_count: post.likes,
+    };
   }
 
   async update(id: number, updatePostDto: UpdatePostDto, authorId: number) {
     const post = await this.findOne(id);
-    
+
     if (post.author_id !== authorId) {
       throw new UnauthorizedException('You can only update your own posts');
     }
 
     const { content } = updatePostDto;
-    
     if (!content) {
       return post;
     }
 
-    const result = await this.databaseService.query(
-      'UPDATE posts SET content = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-      [content, id]
-    );
+    const updated = await this.prisma.orm.Post
+      .where({ id })
+      .update({ content });
 
-    return result.rows[0];
+    if (!updated) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+
+    return {
+      id: updated.id,
+      author_id: updated.authorId,
+      content: updated.content,
+      created_at: updated.createdAt,
+      updated_at: updated.updatedAt,
+    };
   }
 
   async remove(id: number, authorId: number) {
     const post = await this.findOne(id);
-    
+
     if (post.author_id !== authorId) {
       throw new UnauthorizedException('You can only delete your own posts');
     }
 
-    await this.databaseService.query('DELETE FROM posts WHERE id = $1', [id]);
-    
+    await this.prisma.orm.Post.where({ id }).delete();
+
     return { message: `Post with ID ${id} successfully deleted` };
   }
 
   async toggleLike(postId: number, userId: number) {
-    // Check if post exists, findOne will throw NotFoundException if not
     await this.findOne(postId);
-    
-    const checkResult = await this.databaseService.query(
-      'SELECT * FROM post_likes WHERE post_id = $1 AND user_id = $2',
-      [postId, userId]
-    );
 
-    if (checkResult.rows.length > 0) {
-      await this.databaseService.query(
-        'DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2',
-        [postId, userId]
-      );
+    const existingLike = await this.prisma.orm.PostLike
+      .where({ postId, userId })
+      .first();
+
+    if (existingLike) {
+      await this.prisma.orm.PostLike
+        .where({ postId, userId })
+        .delete();
       return { message: 'Post unliked successfully' };
     } else {
-      await this.databaseService.query(
-        'INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)',
-        [postId, userId]
-      );
+      await this.prisma.orm.PostLike.create({
+        postId,
+        userId,
+      });
       return { message: 'Post liked successfully' };
     }
   }
 
   async addComment(postId: number, userId: number, createCommentDto: CreateCommentDto) {
     await this.findOne(postId);
-    
+
     const { content } = createCommentDto;
-    const result = await this.databaseService.query(
-      'INSERT INTO post_comments (post_id, author_id, content) VALUES ($1, $2, $3) RETURNING *',
-      [postId, userId, content]
-    );
-    
-    return result.rows[0];
+    const comment = await this.prisma.orm.PostComment.create({
+      postId,
+      authorId: userId,
+      content,
+    });
+
+    return {
+      id: comment.id,
+      post_id: comment.postId,
+      author_id: comment.authorId,
+      content: comment.content,
+      created_at: comment.createdAt,
+      updated_at: comment.updatedAt,
+    };
   }
 
   async getComments(postId: number) {
     await this.findOne(postId);
 
-    const result = await this.databaseService.query(
-      `SELECT c.*, u.email as author_email
-       FROM post_comments c
-       JOIN users u ON c.author_id = u.id
-       WHERE c.post_id = $1
-       ORDER BY c.created_at ASC`,
-      [postId]
-    );
+    const comments = await this.prisma.orm.PostComment
+      .where({ postId })
+      .include('author')
+      .orderBy((c) => c.createdAt.asc())
+      .all();
 
-    return result.rows;
-  } 
+    return comments.map((c) => ({
+      id: c.id,
+      post_id: c.postId,
+      author_id: c.authorId,
+      content: c.content,
+      created_at: c.createdAt,
+      updated_at: c.updatedAt,
+      author_email: c.author.email,
+    }));
+  }
 }
