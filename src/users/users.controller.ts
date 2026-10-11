@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { UsersService } from './users.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
@@ -41,5 +42,21 @@ export class UsersController {
   @Patch(':id/profile')
   updateProfile(@Param('id') id: string, @Body() updateProfileDto: UpdateProfileDto) {
     return this.usersService.upsertProfile(+id, updateProfileDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/follow')
+  toggleFollow(@Param('id') id: string, @Request() req: any) {
+    return this.usersService.toggleFollow(req.user.userId, +id);
+  }
+
+  @Get(':id/followers')
+  getFollowers(@Param('id') id: string) {
+    return this.usersService.getFollowers(+id);
+  }
+
+  @Get(':id/following')
+  getFollowing(@Param('id') id: string) {
+    return this.usersService.getFollowing(+id);
   }
 }

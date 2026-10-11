@@ -1,5 +1,42 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Production & Build outputs
 dist/
+*.tsbuildinfo
+tsconfig.build.tsbuildinfo
+
+# Environment & Secrets
 .env
+.env.local
+.env.*.local
+!.env.example
+
+# AI Agent Skills (synced by prisma skills sync)
+.agents/
+.claude/
+.cursor/
+.devin/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Coverage / Testing
+coverage/
+*.lcov
+
+# IDE & OS Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project Roadmaps
 feature_roadmap.md
-nestjs_roadmap.md 
+nestjs_roadmap.md
