@@ -118,4 +118,65 @@ export class UsersService {
 
     return result.rows[0];
   }
+
+  async toggleFollow(followerId: number, followingId: number) {
+    // Check if the user is trying to follow themselves
+    if (followerId === followingId) {
+      throw new Error("You cannot follow yourself");
+    }
+
+    await this.findOne(followingId); // Ensure the user to follow exists
+
+    const checkResult = await this.databaseService.query(
+      'SELECT * FROM followers WHERE follower_id = $1 AND following_id = $2',
+      [followerId, followingId]
+    );
+
+    // Check if the follower relationship already exists
+    if (checkResult.rows.length > 0) {
+      // If already following, unfollow by removing the record
+      await this.databaseService.query(
+        'DELETE FROM followers WHERE follower_id = $1 AND following_id = $2',
+        [followerId, followingId]
+      );
+      return { message: `Successfully unfollowed user ${followingId}` };
+    } else {
+      // If not following, follow by inserting a new record
+      await this.databaseService.query(
+        'INSERT INTO followers (follower_id, following_id) VALUES ($1, $2)',
+        [followerId, followingId]
+      );
+      return { message: `Successfully followed user ${followingId}` };
+    }
+  }
+
+  async getFollowers(userId: number) {
+    await this.findOne(userId);
+
+    const result = await this.databaseService.query(
+      `SELECT u.id, u.email, p.username, p.full_name, p.profile_picture_url
+       FROM followers f
+       JOIN users u ON f.follower_id = u.id
+       LEFT JOIN user_profiles p ON u.id = p.user_id
+       WHERE f.following_id = $1
+       ORDER BY f.created_at DESC`,
+      [userId]
+    );
+    return result.rows;
+  }
+
+  async getFollowing(userId: number) {
+    await this.findOne(userId);
+
+    const result = await this.databaseService.query(
+      `SELECT u.id, u.email, p.username, p.full_name, p.profile_picture_url
+       FROM followers f
+       JOIN users u ON f.following_id = u.id
+       LEFT JOIN user_profiles p ON u.id = p.user_id
+       WHERE f.follower_id = $1
+       ORDER BY f.created_at DESC`,
+      [userId]
+    );
+    return result.rows;
+  }
 }

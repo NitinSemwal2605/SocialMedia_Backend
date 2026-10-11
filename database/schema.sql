@@ -39,20 +39,6 @@ CREATE TABLE IF NOT EXISTS posts (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TYPE friendship_status AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
-
-CREATE TABLE IF NOT EXISTS friendships (
-    id SERIAL PRIMARY KEY,
-    requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    addressee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    status friendship_status DEFAULT 'PENDING',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    -- Ensure a user can't friend themselves
-    CHECK (requester_id != addressee_id),
-    -- Ensure there is only one relationship entry per pair of users
-    UNIQUE (requester_id, addressee_id)
-);
 
 CREATE TABLE IF NOT EXISTS post_likes (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -68,4 +54,12 @@ CREATE TABLE IF NOT EXISTS post_comments (
     content TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS followers (
+    follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    following_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (follower_id, following_id),
+    CHECK (follower_id != following_id)
 );
