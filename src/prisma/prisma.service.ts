@@ -59,7 +59,7 @@ export class PrismaService implements OnModuleDestroy {
       this.logger.log('Prisma 8 database connection pool closed.');
     } catch (error) {
       this.logger.error(
-        `Error closing Prisma connection: ${error instanceof Error ? error.message : error}`,
+        `Error closing Prisma connection: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

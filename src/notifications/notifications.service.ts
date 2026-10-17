@@ -21,7 +21,7 @@ export interface NotificationItem {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Helper to create a notification within an existing transaction context.
@@ -50,23 +50,20 @@ export class NotificationsService {
   /**
    * Retrieve notifications for a user with actor profile and post snippet.
    */
+
   async getUserNotifications(
     userId: number,
     query: GetNotificationsDto,
   ): Promise<NotificationItem[]> {
-    const limit = query.limit ?? 20;
-
-    const whereClause: Record<string, any> = { recipientId: userId };
-    if (query.is_read !== undefined) {
-      whereClause['isRead'] = query.is_read;
-    }
-
     const notifications = await this.prisma.orm.Notification
-      .where(whereClause as any)
+      .where({
+        recipientId: userId,
+        ...(query.is_read !== undefined ? { isRead: query.is_read } : {}),
+      } as any)
       .include('actor', (actor) => actor.include('profile'))
       .include('post')
       .orderBy((n) => n.createdAt.desc())
-      .limit(limit)
+      .limit(query.limit ?? 20)
       .all();
 
     return notifications.map((n) => ({
@@ -76,23 +73,22 @@ export class NotificationsService {
       created_at: n.createdAt,
       actor: n.actor
         ? {
-            id: n.actor.id,
-            email: n.actor.email,
-            username: n.actor.profile?.username ?? null,
-            avatar: n.actor.profile?.profilePictureUrl ?? null,
-          }
+          id: n.actor.id,
+          email: n.actor.email,
+          username: n.actor.profile?.username ?? null,
+          avatar: n.actor.profile?.profilePictureUrl ?? null,
+        }
         : null,
       post: n.post
         ? {
-            id: n.post.id,
-            content_snippet:
-              n.post.content.length > 80
-                ? `${n.post.content.slice(0, 80)}...`
-                : n.post.content,
-          }
+          id: n.post.id,
+          content_snippet: n.post.content.slice(0, 80) +
+            (n.post.content.length > 80 ? '...' : ''),
+        }
         : null,
     }));
   }
+
 
   /**
    * Count unread notifications for badge counters.

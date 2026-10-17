@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(createPostDto: CreatePostDto, authorId: number) {
     const { content } = createPostDto;
@@ -113,11 +113,13 @@ export class PostsService {
         .first();
 
       if (existingLike) {
+        // Unlike Post
         await tx.orm.public.PostLike
           .where({ postId, userId })
           .delete();
         return { message: 'Post unliked successfully' };
       } else {
+        // Create Like and Notification
         await tx.orm.public.PostLike.create({
           postId,
           userId,

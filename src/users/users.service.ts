@@ -7,7 +7,7 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(createUserDto: CreateUserDto) {
     const { email, password } = createUserDto;
@@ -191,6 +191,7 @@ export class UsersService {
           .delete();
         return { message: `Successfully unfollowed user ${followingId}` };
       } else {
+        // Create Follower and Notification
         await tx.orm.public.Follower.create({
           followerId,
           followingId,
