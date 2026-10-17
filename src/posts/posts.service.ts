@@ -105,44 +105,70 @@ export class PostsService {
   }
 
   async toggleLike(postId: number, userId: number) {
-    await this.findOne(postId);
+    const post = await this.findOne(postId);
 
-    const existingLike = await this.prisma.orm.PostLike
-      .where({ postId, userId })
-      .first();
-
-    if (existingLike) {
-      await this.prisma.orm.PostLike
+    return this.prisma.client.transaction(async (tx) => {
+      const existingLike = await tx.orm.public.PostLike
         .where({ postId, userId })
-        .delete();
-      return { message: 'Post unliked successfully' };
-    } else {
-      await this.prisma.orm.PostLike.create({
-        postId,
-        userId,
-      });
-      return { message: 'Post liked successfully' };
-    }
+        .first();
+
+      if (existingLike) {
+        await tx.orm.public.PostLike
+          .where({ postId, userId })
+          .delete();
+        return { message: 'Post unliked successfully' };
+      } else {
+        await tx.orm.public.PostLike.create({
+          postId,
+          userId,
+        });
+
+        if (post.author_id !== userId) {
+          await tx.orm.public.Notification.create({
+            recipientId: post.author_id,
+            actorId: userId,
+            type: 'LIKE',
+            postId,
+            isRead: false,
+          });
+        }
+
+        return { message: 'Post liked successfully' };
+      }
+    });
   }
 
   async addComment(postId: number, userId: number, createCommentDto: CreateCommentDto) {
-    await this.findOne(postId);
+    const post = await this.findOne(postId);
 
     const { content } = createCommentDto;
-    const comment = await this.prisma.orm.PostComment.create({
-      postId,
-      authorId: userId,
-      content,
-    });
 
-    return {
-      id: comment.id,
-      post_id: comment.postId,
-      author_id: comment.authorId,
-      content: comment.content,
-      created_at: comment.createdAt,
-      updated_at: comment.updatedAt,
-    };
+    return this.prisma.client.transaction(async (tx) => {
+      const comment = await tx.orm.public.PostComment.create({
+        postId,
+        authorId: userId,
+        content,
+      });
+
+      if (post.author_id !== userId) {
+        await tx.orm.public.Notification.create({
+          recipientId: post.author_id,
+          actorId: userId,
+          type: 'COMMENT',
+          postId,
+          isRead: false,
+        });
+      }
+
+      return {
+        id: comment.id,
+        post_id: comment.postId,
+        author_id: comment.authorId,
+        content: comment.content,
+        created_at: comment.createdAt,
+        updated_at: comment.updatedAt,
+      };
+    });
   }
 
   async getComments(postId: number) {

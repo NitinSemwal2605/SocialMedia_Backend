@@ -180,22 +180,33 @@ export class UsersService {
 
     await this.findOne(followingId);
 
-    const existingFollow = await this.prisma.orm.Follower
-      .where({ followerId, followingId })
-      .first();
-
-    if (existingFollow) {
-      await this.prisma.orm.Follower
+    return this.prisma.client.transaction(async (tx) => {
+      const existingFollow = await tx.orm.public.Follower
         .where({ followerId, followingId })
-        .delete();
-      return { message: `Successfully unfollowed user ${followingId}` };
-    } else {
-      await this.prisma.orm.Follower.create({
-        followerId,
-        followingId,
-      });
-      return { message: `Successfully followed user ${followingId}` };
-    }
+        .first();
+
+      if (existingFollow) {
+        await tx.orm.public.Follower
+          .where({ followerId, followingId })
+          .delete();
+        return { message: `Successfully unfollowed user ${followingId}` };
+      } else {
+        await tx.orm.public.Follower.create({
+          followerId,
+          followingId,
+        });
+
+        await tx.orm.public.Notification.create({
+          recipientId: followingId,
+          actorId: followerId,
+          type: 'FOLLOW',
+          postId: null,
+          isRead: false,
+        });
+
+        return { message: `Successfully followed user ${followingId}` };
+      }
+    });
   }
 
   async getFollowers(userId: number) {

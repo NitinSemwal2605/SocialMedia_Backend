@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { PostsModule } from './posts/posts.module.js';
 import { FeedModule } from './feed/feed.module.js';
 import { BookmarksModule } from './bookmarks/bookmarks.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -18,8 +19,9 @@ import { BookmarksModule } from './bookmarks/bookmarks.module.js';
     PostsModule,
     FeedModule,
     BookmarksModule,
+    NotificationsModule,
   ],
   controllers: [AppController], // This is an array of controllers that will be registered with the application.
   providers: [AppService], // This is an array of providers that will be registered with the application.
 })
-export class AppModule {}
+export class AppModule { }

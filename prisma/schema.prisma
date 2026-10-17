@@ -1,6 +1,6 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url = env("DATABASE_URL")
 }
 
 generator client {
@@ -15,22 +15,24 @@ enum UserRole {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique @db.VarChar(255)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  role         UserRole @default(USER)
-  createdAt    DateTime @default(now()) @map("created_at")
+  id                     Int            @id @default(autoincrement())
+  email                  String         @unique @db.VarChar(255)
+  passwordHash           String         @map("password_hash") @db.VarChar(255)
+  role                   UserRole       @default(USER)
+  createdAt              DateTime       @default(now()) @map("created_at")
 
-  profile  UserProfile?
-  sessions Session[]
-  posts    Post[]
-  likes    PostLike[]
-  comments PostComment[]
+  profile                UserProfile?
+  sessions               Session[]
+  posts                  Post[]
+  likes                  PostLike[]
+  comments               PostComment[]
 
   // Self-relation via Follower model
-  followers Follower[] @relation("UserFollowers")
-  following Follower[] @relation("UserFollowing")
-  bookmarks Bookmark[]
+  followers              Follower[]     @relation("UserFollowers")
+  following              Follower[]     @relation("UserFollowing")
+  bookmarks              Bookmark[]
+  notificationsReceived  Notification[] @relation("UserNotifications")
+  notificationsTriggered Notification[] @relation("NotificationActor")
 
   @@map("users")
 }
@@ -43,7 +45,7 @@ model Session {
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
 }
@@ -59,23 +61,24 @@ model UserProfile {
   website           String?  @db.VarChar(255)
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_profiles")
 }
 
 model Post {
-  id        Int      @id @default(autoincrement())
-  authorId  Int      @map("author_id")
-  content   String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            Int            @id @default(autoincrement())
+  authorId      Int            @map("author_id")
+  content       String
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
 
-  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  likes     PostLike[]
-  comments  PostComment[]
-  bookmarks Bookmark[]
-  tags      PostTag[]
+  author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes         PostLike[]
+  comments      PostComment[]
+  bookmarks     Bookmark[]
+  tags          PostTag[]
+  notifications Notification[]
 
   @@index([authorId], map: "idx_posts_author_id")
   @@map("posts")
@@ -86,8 +89,8 @@ model PostLike {
   postId    Int      @map("post_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@id([userId, postId])
   @@index([postId], map: "idx_post_likes_post_id")
@@ -102,8 +105,8 @@ model PostComment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([postId], map: "idx_post_comments_post_id")
   @@map("post_comments")
@@ -114,8 +117,8 @@ model Follower {
   followingId Int      @map("following_id")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@id([followerId, followingId])
   @@index([followingId], map: "idx_followers_following_id")
@@ -128,8 +131,8 @@ model Bookmark {
   postId    Int      @map("post_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@id([userId, postId])
   @@index([userId], map: "idx_bookmarks_user_id")
@@ -138,11 +141,11 @@ model Bookmark {
 
 // Hashtag functionality
 model Tag {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique @db.VarChar(255)
-  createdAt DateTime @default(now()) @map("created_at")
+  id        Int       @id @default(autoincrement())
+  name      String    @unique @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at")
 
-  posts PostTag[]
+  posts     PostTag[]
 
   @@map("tags")
 }
@@ -153,10 +156,38 @@ model PostTag {
   tagId     Int      @map("tag_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([postId, tagId])
   @@index([tagId], map: "idx_post_tags_tag_id")
   @@map("post_tags")
+}
+
+// Enum for in-app notification types
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+
+  @@map("notification_type")
+}
+
+// In-app activity notifications model
+model Notification {
+  id          Int              @id @default(autoincrement())
+  recipientId Int              @map("recipient_id")
+  actorId     Int              @map("actor_id")
+  type        NotificationType
+  postId      Int?             @map("post_id")
+  isRead      Boolean          @default(false) @map("is_read")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  recipient   User             @relation("UserNotifications", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  post        Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // Composite index optimizing unread notification queries and badge counts
+  @@index([recipientId, isRead], map: "idx_notifications_recipient_unread")
+  @@map("notifications")
 }
