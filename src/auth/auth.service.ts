@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Inject, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
@@ -6,14 +6,34 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { RegisterAdminDto } from './dto/register-admin.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { AUTH_OPTIONS, AUTH_DEFAULT_ROLE, type AuthOptions } from './auth.constants.js';
 
 @Injectable()
 export class AuthService {
+  private readonly saltRounds: number;
+  private readonly adminSecret: string;
+  private readonly sessionDurationDays: number;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+
+    // Custom Provider DI Injections using @Inject(TOKEN):
+    @Optional()
+    @Inject(AUTH_OPTIONS)
+    private readonly authOptions?: AuthOptions,
+
+    @Optional()
+    @Inject(AUTH_DEFAULT_ROLE)
+    private readonly defaultRole: string = 'USER',
+  ) {
+    this.saltRounds = this.authOptions?.saltRounds ?? 10;
+    this.adminSecret =
+      this.authOptions?.adminSecretCode ??
+      this.configService?.get<string>('ADMIN_SECRET_CODE', 'super_secret_admin_code');
+    this.sessionDurationDays = this.authOptions?.sessionDurationDays ?? 1;
+  }
 
   async register(registerDto: RegisterDto) {
     const { email, password } = registerDto;
@@ -23,13 +43,13 @@ export class AuthService {
       throw new BadRequestException('User already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, this.saltRounds);
     const user = await this.prisma.orm.User
       .select('id', 'email', 'role', 'createdAt')
       .create({
         email,
         passwordHash: hashedPassword,
-        role: 'USER',
+        role: this.defaultRole,
       } as any);
 
     return {
@@ -46,8 +66,7 @@ export class AuthService {
   async registerAdmin(registerDto: RegisterAdminDto) {
     const { email, password, secretCode } = registerDto;
 
-    const adminSecret = this.configService.get<string>('ADMIN_SECRET_CODE', 'super_secret_admin_code');
-    if (secretCode !== adminSecret) {
+    if (secretCode !== this.adminSecret) {
       throw new UnauthorizedException('Invalid admin secret code');
     }
 
@@ -56,7 +75,7 @@ export class AuthService {
       throw new BadRequestException('User already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, this.saltRounds);
     const user = await this.prisma.orm.User
       .select('id', 'email', 'role', 'createdAt')
       .create({
@@ -92,9 +111,9 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email, role: user.role };
     const jwt_token = this.jwtService.sign(payload);
 
-    // Calculate session expiration (1 day)
+    // Calculate session expiration using injected sessionDurationDays
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 1);
+    expiresAt.setDate(expiresAt.getDate() + this.sessionDurationDays);
 
     await this.prisma.orm.Session.create({
       userId: user.id,
