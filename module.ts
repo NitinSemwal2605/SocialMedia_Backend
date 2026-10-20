@@ -16,5 +16,6 @@ const appService = compute({
 });
 
 export default module('learningprisma', ({ provision }) => {
-  provision(appService);
+  const db = provision(rawPostgres({ name: 'db' }));
+  provision(appService, { deps: { db } });
 });
